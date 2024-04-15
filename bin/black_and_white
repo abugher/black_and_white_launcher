@@ -1,0 +1,237 @@
+#!/bin/bash
+#
+# This routine insists on a non-default install path.  That may be an
+# unnecessary annoyance.
+# 
+
+
+shopt -s nullglob
+
+export WINEPREFIX="${HOME}/wineprefixes/black_and_white"
+export WINEARCH=win32
+install_path="${HOME}/wineprefixes/black_and_white/drive_c/BlackAndWhite"
+latest_readme="${install_path}/readme-patch-v142.txt"
+image_dir=games/black_and_white/images/black_and_white/
+save_dir="${HOME}/games/black_and_white/save_files"
+patch_path="${HOME}/games/black_and_white/patches"
+patches=(
+  Black_White_Patch_v1.100
+  black_white_patch_v1_20
+  BWFanPatchInstaller
+  creaturecd_gorilla
+  creaturecd_horse
+  creaturecd_leopard
+  creaturecd_mandrill
+  BW_Football_Addon
+  BW_Villager_Banter
+)
+#patch_download_links=()
+
+
+function main() {
+  case "${1}" in
+    install)
+      install
+      ;;
+    configure)
+      install
+      configure
+      ;;
+    backup)
+      backup "${2}"
+      ;;
+    restore)
+      install
+      restore "${2}"
+      ;;
+    '')
+      ;&
+    play)
+      install
+      play
+      ;;
+    *)
+      usage
+      fail "Unrecognized action:  ${1}"
+      ;;
+  esac
+}
+
+
+function install() {
+  if check_install; then
+    return 0
+  fi
+  admonish
+  configure_wine
+  install_game
+  fix_creature_cave
+  install_patches
+}
+
+
+function play() {
+  output 'playing the game'
+  cd "${install_path}" || fail "Failed to enter install path." "${?}"
+  wine runblack.exe  || fail "Failed to start the game." "${?}"
+}
+
+
+function configure() {
+  output 'configuring the game'
+  cd "${install_path}" || fail "Failed to enter install path." "${?}"
+  wine Setup.exe  || fail "Failed to start the configuration program." "${?}"
+}
+
+
+function backup() {
+  name="${1:-$(date --iso-8601=second)}"
+  output 'backing up game state'
+  cd "${save_dir}" || fail "Failed to enter save directory."
+
+  if test -d "${name}"; then
+    fail "Backup already exists:  '${name}'"
+  fi
+
+  mkdir "${name}" || fail "Failed to create directory:  '${name}'" "${?}"
+  wine regedit -E "${name}/LHMultiplayer.reg" 'HKEY_CURRENT_USER\Software\Lionhead Studios Ltd\Black & White\LHMultiplayer' || fail "Failed to back up registry key." "${?}"
+
+  mkdir "${name}/CreatureMind" || fail "Failed to create directory:  '${name}/CreatureMind'" "${?}"
+  rsync -a "${install_path}/Scripts/CreatureMind/"*.erc ./"${name}/CreatureMind/" || fail "Failed to back up creature mind." "${?}"
+
+  rsync -a --exclude=Backup "${install_path}/Profiles/" ./"${name}/Profiles/" || fail "Failed to back up profiles."
+
+  output "backup created:  '${name}'"
+
+  cd -
+}
+
+
+function restore() {
+  output 'restoring game state'
+  cd "${save_dir}" || fail "Failed to enter save directory."
+  name="${1:-$(ls -1tr | tail -n 1)}"
+
+  if ! test -e "${name}"; then
+    fail "No such save name:  '${name}'"
+  fi
+
+  wine regedit "${name}/LHMultiplayer.reg" || fail "Failed to restore registry key." "${?}"
+  rsync -a ./"${name}/CreatureMind/"*.erc "${install_path}/Scripts/CreatureMind/" || fail "Failed to restore creature minds." "${?}"
+
+  cd -
+  cd "${save_dir}/${name}/Profiles" || fail "Failed to enter profiles directory." "${?}"
+  for profile in *; do
+    rsync -a --delete "./${profile}/" "${install_path}/Profiles/${profile}/" || fail "Failed to restore profile:  '${profile}'"
+  done
+  cd -
+ 
+  output "backup restored:  '${name}'"
+}
+
+
+function check_install() {
+  if test -e "${latest_readme}"; then
+    return 0
+  fi
+
+  if test -e "${WINEPREFIX}"; then
+    warn "Back up Profiles, then remove:  '${WINEPREFIX}'"
+    fail "Incomplete installation already present."
+  fi
+
+  return 1
+}
+
+
+function admonish() {
+  warn 'Your active role in the following installation:'
+  warn '  * change the install path to:  C:\BlackAndWhite'
+  warn '  * rescue dialog box(es) from behind the backdrop image'
+  warn '  * decline to start the game after initial install'
+  warn '  * configure the game and adjust resolution when prompted after patch 1.42'
+  warn '  * click "accept", "next", and "yes", ad nauseum'
+  warn 'Press enter after reading.'
+  read
+}
+
+
+function configure_wine() {
+  output 'creating wineprefix'
+  wineboot -i || fail "Failed to create wineprefix." "${?}"
+
+  cd "${WINEPREFIX}/dosdevices/" || fail "Failed to enter dosdevices directory." "${?}"
+  output 'mapping "optical" drive'
+  ln -s ../../../"${image_dir}" d: || fail "Failed to map drive D: to image directory." "${?}"
+  cd -
+
+  output 'replacing mono with .NET'
+  winetricks remove_mono >/dev/null 2>&1 || fail "Failed to remove mono." "${?}"
+  winetricks dotnet45 >/dev/null 2>&1 || fail "Failed to install dotnet." "${?}"
+}
+
+
+function install_game() {
+  output 'installing from disc image'
+  wine 'D:\Setup.exe' >/dev/null 2>&1 || fail "Installer failed." "${?}"
+}
+
+
+function fix_creature_cave() {
+  if test -e "${install_path}/scripts"; then
+    return 0
+  fi
+  cd "${install_path}" || fail "Failed to enter install path." "${?}"
+  ln -s Scripts scripts || fail "Failed to fix creature cave." "${?}"
+  cd -
+}
+
+
+function install_patches() {
+  for patch in "${patches[@]}"; do
+    output "installing patch:  '${patch}.exe'"
+    wine "${patch_path}/${patch}.exe" >/dev/null 2>&1 || fail "Patch installer failed:  '${patch}.exe'" "${?}"
+  done
+}
+
+
+function usage() {
+  output 'Usage:'
+  output ''
+  output '  black_and_white [action] [...]'
+  output ''
+  output '  black_and_white'
+  output '  black_and_white play'
+  output '  black_and_white install'
+  output '  black_and_white configure'
+  output '  black_and_white backup'
+  output '  black_and_white restore'
+  output '  black_and_white backup [name]'
+  output '  black_and_white restore [name]'
+  output ''
+  output 'Without arguments, "play" is the implied action.  "play" implies "install" as a'
+  output 'prior action.  "install" acts only if the game is not yet installed.'
+  output '"configure" provides controls for screen resolution.  "backup" backs up'
+  output 'profiles and creatures.  A name for the backup may be specified.  "restore"'
+  output 'restores a backup (destructively).  A backup may be specified by name.  If no'
+  output 'name is specified, the most recent backup file is restored.'
+}
+
+
+function fail() {
+  printf 'ERROR:  %s\n' "${1}" >&2
+  exit "${2:-1}"
+}
+
+
+function warn() {
+  printf 'WARNING:  %s\n' "${1}" >&2
+}
+
+
+function output() {
+  printf '%s\n' "${1}"
+}
+
+
+main "${@}"
