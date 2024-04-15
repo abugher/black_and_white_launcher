@@ -1,35 +1,53 @@
 #!/bin/bash
 #
-# This routine insists on a non-default install path.  That may be an
-# unnecessary annoyance.
-# 
+# Requires:
+#   * wine
+#   * winetricks
+#   * wget
+#   * original game installer disc contents
+#
 
 
 shopt -s nullglob
 
+#install_path="${HOME}/wineprefixes/black_and_white/drive_c/BlackAndWhite"
+install_path="${HOME}/wineprefixes/black_and_white/drive_c/Program Files/Lionhead Studios Ltd/Black & White"
+image_dir="${HOME}/games/black_and_white/images/black_and_white/"
+save_dir="${HOME}/games/black_and_white/save_files"
+patch_dir="${HOME}/games/black_and_white/patches"
+latest_readme="${install_path}/readme-patch-v142.txt"
+patches=(
+  'Black_White_Patch_v1.100'
+  'black_white_patch_v1_20'
+  'BWFanPatchInstaller'
+  'creaturecd_gorilla'
+  'creaturecd_horse'
+  'creaturecd_leopard'
+  'creaturecd_mandrill'
+  'BW_Football_Addon'
+  'BW_Villager_Banter'
+)
+declare -A patch_urls
+patch_urls=(
+  ['Black_White_Patch_v1.100']='https://forum.bwgame.net/downloads/v1-1-patch.129/download'
+  ['black_white_patch_v1_20']='https://forum.bwgame.net/downloads/v1-2-patch.130/download'
+  ['BWFanPatchInstaller']='https://forum.bwgame.net/downloads/black-white-unofficial-patch-v1-42.1418/download'
+  ['creaturecd_gorilla']='https://forum.bwgame.net/downloads/gorilla.133/download'
+  ['creaturecd_horse']='https://forum.bwgame.net/downloads/horse.134/download'
+  ['creaturecd_leopard']='https://forum.bwgame.net/downloads/leopard.135/download'
+  ['creaturecd_mandrill']='https://forum.bwgame.net/downloads/mandrill.136/download'
+  ['BW_Football_Addon']='https://forum.bwgame.net/downloads/football-addon.138/download'
+  ['BW_Villager_Banter']='https://forum.bwgame.net/downloads/villager-banter.139/download'
+)
 export WINEPREFIX="${HOME}/wineprefixes/black_and_white"
 export WINEARCH=win32
-install_path="${HOME}/wineprefixes/black_and_white/drive_c/BlackAndWhite"
-latest_readme="${install_path}/readme-patch-v142.txt"
-image_dir=games/black_and_white/images/black_and_white/
-save_dir="${HOME}/games/black_and_white/save_files"
-patch_path="${HOME}/games/black_and_white/patches"
-patches=(
-  Black_White_Patch_v1.100
-  black_white_patch_v1_20
-  BWFanPatchInstaller
-  creaturecd_gorilla
-  creaturecd_horse
-  creaturecd_leopard
-  creaturecd_mandrill
-  BW_Football_Addon
-  BW_Villager_Banter
-)
-#patch_download_links=()
 
 
 function main() {
   case "${1}" in
+    download_patches)
+      download_patches
+      ;;
     install)
       install
       ;;
@@ -58,11 +76,33 @@ function main() {
 }
 
 
+function download_patches() {
+  cd "${patch_dir}" || fail "Failed to enter patch directory:  '${patch_dir}'" "${?}"
+  for patch in "${!patch_urls[@]}"; do
+    url="${patch_urls[${patch}]}"
+    if ! test -e "${patch}.exe"; then
+      wget --content-disposition --trust-server-names "${url}" || fail "Failed to download patch:  '${patch}'" "${?}"
+    fi
+  done
+  for zip in *.zip; do
+    unzip "${zip}" || fail "Failed to unzip patch:  '${zip}'" "${?}"
+    rm "${zip}" || fail "Failed to clean up zip file:  '${zip}'" "${?}"
+  done
+  for patch in "${!patch_urls[@]}"; do
+    if ! test -e "${patch}.exe"; then
+      fail "Patch missing after download:  '${patch}'"
+    fi
+  done
+  cd -
+}
+
+
 function install() {
   if check_install; then
     return 0
   fi
-  admonish
+  #admonish
+  download_patches
   configure_wine
   install_game
   fix_creature_cave
@@ -146,11 +186,10 @@ function check_install() {
 
 function admonish() {
   warn 'Your active role in the following installation:'
-  warn '  * change the install path to:  C:\BlackAndWhite'
   warn '  * rescue dialog box(es) from behind the backdrop image'
   warn '  * decline to start the game after initial install'
   warn '  * configure the game and adjust resolution when prompted after patch 1.42'
-  warn '  * click "accept", "next", and "yes", ad nauseum'
+  warn '  * click "accept", "next", "yes", etc, ad nauseum' 
   warn 'Press enter after reading.'
   read
 }
@@ -162,7 +201,7 @@ function configure_wine() {
 
   cd "${WINEPREFIX}/dosdevices/" || fail "Failed to enter dosdevices directory." "${?}"
   output 'mapping "optical" drive'
-  ln -s ../../../"${image_dir}" d: || fail "Failed to map drive D: to image directory." "${?}"
+  ln -s "${image_dir}" d: || fail "Failed to map drive D: to image directory." "${?}"
   cd -
 
   output 'replacing mono with .NET'
@@ -190,7 +229,7 @@ function fix_creature_cave() {
 function install_patches() {
   for patch in "${patches[@]}"; do
     output "installing patch:  '${patch}.exe'"
-    wine "${patch_path}/${patch}.exe" >/dev/null 2>&1 || fail "Patch installer failed:  '${patch}.exe'" "${?}"
+    wine "${patch_dir}/${patch}.exe" >/dev/null 2>&1 || fail "Patch installer failed:  '${patch}.exe'" "${?}"
   done
 }
 
