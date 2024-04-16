@@ -93,7 +93,7 @@ function download_patches() {
       fail "Patch missing after download:  '${patch}'"
     fi
   done
-  cd -
+  cd "${OLDPWD}"
 }
 
 
@@ -143,7 +143,7 @@ function backup() {
 
   output "backup created:  '${name}'"
 
-  cd -
+  cd "${OLDPWD}"
 }
 
 
@@ -159,12 +159,12 @@ function restore() {
   wine regedit "${name}/LHMultiplayer.reg" || fail "Failed to restore registry key." "${?}"
   rsync -a ./"${name}/CreatureMind/"*.erc "${install_path}/Scripts/CreatureMind/" || fail "Failed to restore creature minds." "${?}"
 
-  cd -
+  cd "${OLDPWD}"
   cd "${save_dir}/${name}/Profiles" || fail "Failed to enter profiles directory." "${?}"
   for profile in *; do
     rsync -a --delete "./${profile}/" "${install_path}/Profiles/${profile}/" || fail "Failed to restore profile:  '${profile}'"
   done
-  cd -
+  cd "${OLDPWD}"
  
   output "backup restored:  '${name}'"
 }
@@ -202,7 +202,7 @@ function configure_wine() {
   cd "${WINEPREFIX}/dosdevices/" || fail "Failed to enter dosdevices directory." "${?}"
   output 'mapping "optical" drive'
   ln -s "${image_dir}" d: || fail "Failed to map drive D: to image directory." "${?}"
-  cd -
+  cd "${OLDPWD}"
 
   output 'replacing mono with .NET'
   winetricks remove_mono >/dev/null 2>&1 || fail "Failed to remove mono." "${?}"
@@ -222,7 +222,7 @@ function fix_creature_cave() {
   fi
   cd "${install_path}" || fail "Failed to enter install path." "${?}"
   ln -s Scripts scripts || fail "Failed to fix creature cave." "${?}"
-  cd -
+  cd "${OLDPWD}"
 }
 
 
