@@ -11,6 +11,8 @@ Usage:
   black_and_white restore
   black_and_white backup [name]
   black_and_white restore [name]
+  black_and_white backup_creature <profile name> [creature name]
+  black_and_white restore_creature <profile name> [creature name]
   ```
 
 Without arguments, `play` is the implied action.  `play` implies `install` as a
