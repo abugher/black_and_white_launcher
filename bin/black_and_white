@@ -1,21 +1,22 @@
 #!/bin/bash
 #
 # Requires:
+#   * original game installer disc contents
 #   * wine
 #   * winetricks
 #   * wget
-#   * original game installer disc contents
-#
+#   * dos2unix
 
 
 shopt -s nullglob
 
-#install_path="${HOME}/wineprefixes/black_and_white/drive_c/BlackAndWhite"
-install_path="${HOME}/wineprefixes/black_and_white/drive_c/Program Files/Lionhead Studios Ltd/Black & White"
+#install_dir="${HOME}/wineprefixes/black_and_white/drive_c/BlackAndWhite"
+install_dir="${HOME}/wineprefixes/black_and_white/drive_c/Program Files/Lionhead Studios Ltd/Black & White"
 image_dir="${HOME}/games/black_and_white/images/black_and_white/"
-save_dir="${HOME}/games/black_and_white/save_files"
+backup_dir="${HOME}/games/black_and_white/backups"
+creature_dir="${HOME}/games/black_and_white/creatures"
 patch_dir="${HOME}/games/black_and_white/patches"
-latest_readme="${install_path}/readme-patch-v142.txt"
+latest_readme="${install_dir}/readme-patch-v142.txt"
 patches=(
   'Black_White_Patch_v1.100'
   'black_white_patch_v1_20'
@@ -61,6 +62,12 @@ function main() {
     restore)
       install
       restore "${2}"
+      ;;
+    backup_creature)
+      backup_creature "${2}" "${3}"
+      ;;
+    restore_creature)
+      restore_creature "${2}" "${3}"
       ;;
     '')
       ;&
@@ -112,14 +119,14 @@ function install() {
 
 function play() {
   output 'playing the game'
-  cd "${install_path}" || fail "Failed to enter install path." "${?}"
+  cd "${install_dir}" || fail "Failed to enter install path." "${?}"
   wine runblack.exe  || fail "Failed to start the game." "${?}"
 }
 
 
 function configure() {
   output 'configuring the game'
-  cd "${install_path}" || fail "Failed to enter install path." "${?}"
+  cd "${install_dir}" || fail "Failed to enter install path." "${?}"
   wine Setup.exe  || fail "Failed to start the configuration program." "${?}"
 }
 
@@ -127,7 +134,7 @@ function configure() {
 function backup() {
   name="${1:-$(date --iso-8601=second)}"
   output 'backing up game state'
-  cd "${save_dir}" || fail "Failed to enter save directory."
+  cd "${backup_dir}" || fail "Failed to enter save directory."
 
   if test -d "${name}"; then
     fail "Backup already exists:  '${name}'"
@@ -137,9 +144,9 @@ function backup() {
   wine regedit -E "${name}/LHMultiplayer.reg" 'HKEY_CURRENT_USER\Software\Lionhead Studios Ltd\Black & White\LHMultiplayer' || fail "Failed to back up registry key." "${?}"
 
   mkdir "${name}/CreatureMind" || fail "Failed to create directory:  '${name}/CreatureMind'" "${?}"
-  rsync -a "${install_path}/Scripts/CreatureMind/"*.erc ./"${name}/CreatureMind/" || fail "Failed to back up creature mind." "${?}"
+  rsync -a "${install_dir}/Scripts/CreatureMind/"*.erc ./"${name}/CreatureMind/" || fail "Failed to back up creature mind." "${?}"
 
-  rsync -a --exclude=Backup "${install_path}/Profiles/" ./"${name}/Profiles/" || fail "Failed to back up profiles."
+  rsync -a --exclude=Backup "${install_dir}/Profiles/" ./"${name}/Profiles/" || fail "Failed to back up profiles."
 
   output "backup created:  '${name}'"
 
@@ -149,7 +156,7 @@ function backup() {
 
 function restore() {
   output 'restoring game state'
-  cd "${save_dir}" || fail "Failed to enter save directory."
+  cd "${backup_dir}" || fail "Failed to enter save directory."
   name="${1:-$(ls -1tr | tail -n 1)}"
 
   if ! test -e "${name}"; then
@@ -157,16 +164,104 @@ function restore() {
   fi
 
   wine regedit "${name}/LHMultiplayer.reg" || fail "Failed to restore registry key." "${?}"
-  rsync -a ./"${name}/CreatureMind/"*.erc "${install_path}/Scripts/CreatureMind/" || fail "Failed to restore creature minds." "${?}"
+  rsync -a ./"${name}/CreatureMind/"*.erc "${install_dir}/Scripts/CreatureMind/" || fail "Failed to restore creature minds." "${?}"
 
   cd "${OLDPWD}"
-  cd "${save_dir}/${name}/Profiles" || fail "Failed to enter profiles directory." "${?}"
+  cd "${backup_dir}/${name}/Profiles" || fail "Failed to enter profiles directory." "${?}"
   for profile in *; do
-    rsync -a --delete "./${profile}/" "${install_path}/Profiles/${profile}/" || fail "Failed to restore profile:  '${profile}'"
+    rsync -a --delete "./${profile}/" "${install_dir}/Profiles/${profile}/" || fail "Failed to restore profile:  '${profile}'"
   done
   cd "${OLDPWD}"
  
   output "backup restored:  '${name}'"
+}
+
+
+function backup_creature() {
+  output 'backing up creature'
+  if test "${#}" -lt 1; then
+    fail "Specify a profile name."
+  fi
+  profile="${1}"
+  profile_underscored="$(sed -E 's/(.)/_\1/g' <<< "${profile}")"
+  profile_key='HKEY_CURRENT_USER\Software\Lionhead Studios Ltd\Black & White\LHMultiplayer\Profiles\'"${profile_underscored}"
+  creature_file="$(wine reg query "${profile_key}" /v file | dos2unix | awk '/^ *file/ {print $3}')" || fail "Failed to extract creature file name." "${?}"
+  creature_name_hex="$(wine reg query "${profile_key}" /v 'creature name' | dos2unix | awk '/^ *creature name/ {print $4}')" || fail "Failed to extract creature name." "${?}"
+  creature_name_format_string="$(sed -E 's/(..)/\\x\1/g' <<< "${creature_name_hex}")"
+  creature_name="$(printf "${creature_name_format_string}\n" | tr -d '\0')" || fail "Failed to convert creature name."
+  # Allow user to override creature name.
+  creature_name="${2:-${creature_name}}"
+  mkdir -p "${creature_dir}/${profile}/${creature_name}"
+  cp "${install_dir}/Scripts/CreatureMind/${creature_file}" "${creature_dir}/${profile}/${creature_name}/${creature_file}" || fail "Failed to back up creature mind file." "${?}"
+  cp "${install_dir}/Scripts/CreatureMind/Physique${creature_file}" "${creature_dir}/${profile}/${creature_name}/Physique${creature_file}" || fail "Failed to back up creature body file." "${?}"
+  output "creature backed up:  ${creature_name}"
+}
+
+
+function restore_creature() {
+  output 'restoring creature'
+  if test "${#}" -lt 1; then
+    fail "Specify a profile name."
+  fi
+  profile="${1}"
+  creature_name="${2}"
+  profile_underscored="$(sed -E 's/(.)/_\1/g' <<< "${profile}")"
+  profile_key='HKEY_CURRENT_USER\Software\Lionhead Studios Ltd\Black & White\LHMultiplayer\Profiles\'"${profile_underscored}"
+  if ! test -d "${creature_dir}/${profile}"; then
+    fail "No creatures are backed up for this profile:  '${profile}'"
+  fi
+  if ! test -d "${install_dir}/Profiles/${profile_underscored}"; then
+    debug "${install_dir}/Profiles/${profile_underscored}"
+    fail "Profile not present:  '${profile}'"
+  fi
+  cd "${creature_dir}/${profile}" || fail "Failed to enter profile subdirectory." "${?}"
+  creatures=( * )
+  case "${#creatures[@]}" in
+    0)
+      fail "No creatures backed up in existing directory for profile:  '${profile}'" "${?}"
+      ;;
+    1)
+      creature_name="${creature_name:-${creatures[0]}}"
+      ;;
+    *)
+      if test '' = "${creature_name}"; then
+        warn "Multiple creatures present for profile '${profile}'.  You must specify one of:"
+        for creature in "${creatures[@]}"; do
+          warn "  ${creature}"
+        done
+        fail "Failed to determine creature name."
+      fi
+      backup_present='no'
+      for creature in "${creatures[@]}"; do
+        if test "${creature}" = "${creature_name}"; then
+          backup_present='yes'
+        fi
+      done
+      if test 'no' = "${backup_present}"; then
+        fail "No backup is present for creature:  '${creature_name}'"
+      fi
+      ;;
+  esac
+
+  cd "${OLDPWD}"
+  cd "${creature_dir}/${profile}/${creature_name}"
+
+  files=( * )
+  if ! test 2 = "${#files[@]}"; then
+    fail "Wrong number of files in save directory for creature:  '${creature_name}'"
+  fi
+  creature_file="$(ls | grep -v Physique)"
+  if ! grep -q . <<< "${creature_file}"; then
+    fail "Failed to read creature mind file name."
+  fi
+  creature_body_file="$(ls | grep Physique)"
+  if ! grep -q . <<< "${creature_body_file}"; then
+    fail "Failed to read creature body file name."
+  fi
+  cp "${creature_file}" "${install_dir}/Scripts/CreatureMind/" || fail "Failed to restore creature mind file." "${?}"
+  cp "${creature_body_file}" "${install_dir}/Scripts/CreatureMind/" || fail "Failed to restore creature body file." "${?}"
+  wine reg add "${profile_key}" /v file /d "${creature_file}" /f || fail "Failed to associate profile '${profile}' with creature:  '${creature}'" "${?}"
+  output "creature restored:  ${creature_name}"
 }
 
 
@@ -217,10 +312,10 @@ function install_game() {
 
 
 function fix_creature_cave() {
-  if test -e "${install_path}/scripts"; then
+  if test -e "${install_dir}/scripts"; then
     return 0
   fi
-  cd "${install_path}" || fail "Failed to enter install path." "${?}"
+  cd "${install_dir}" || fail "Failed to enter install path." "${?}"
   ln -s Scripts scripts || fail "Failed to fix creature cave." "${?}"
   cd "${OLDPWD}"
 }
@@ -235,6 +330,8 @@ function install_patches() {
 
 
 function usage() {
+# The name under which the creature was backed up should become the in-game
+# name of the creature when restored.  It doesn't, though.
   output 'Usage:'
   output ''
   output '  black_and_white [action] [...]'
@@ -245,15 +342,24 @@ function usage() {
   output '  black_and_white configure'
   output '  black_and_white backup'
   output '  black_and_white restore'
-  output '  black_and_white backup [name]'
-  output '  black_and_white restore [name]'
+  output '  black_and_white backup [backup name]'
+  output '  black_and_white restore [backup name]'
+  output '  black_and_white backup_creature <profile name> [creature name]'
+  output '  black_and_white restore_creature <profile name> [creature name]'
   output ''
   output 'Without arguments, "play" is the implied action.  "play" implies "install" as a'
   output 'prior action.  "install" acts only if the game is not yet installed.'
   output '"configure" provides controls for screen resolution.  "backup" backs up'
   output 'profiles and creatures.  A name for the backup may be specified.  "restore"'
   output 'restores a backup (destructively).  A backup may be specified by name.  If no'
-  output 'name is specified, the most recent backup file is restored.'
+  output 'name is specified, the most recent backup file is restored.  "backup_creature"'
+  output 'backs up the creature from the specified profile.  The creature will be saved'
+  output 'with the specified creature name, if any, or else the in-game name of the'
+  output 'creature.  "restore_creature" restores a creature to the specified profile.  If'
+  output 'no creature name is specified, and only one creature is backed up for this'
+  output 'profile, that creature will be restored.  If multiple creatures are backed up,'
+  output 'a creature name must be specified, and the named creature will be restored.  It'
+  output 'will become the active creature associated with the named profile.'
 }
 
 
@@ -270,6 +376,13 @@ function warn() {
 
 function output() {
   printf '%s\n' "${1}"
+}
+
+
+function debug() {
+  if ! test '' = "${DEBUG}"; then
+    printf 'DEBUG:  %s\n' "${1}" >&2
+  fi
 }
 
 
