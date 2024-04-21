@@ -13,10 +13,12 @@ shopt -s nullglob
 #install_dir="${HOME}/wineprefixes/black_and_white/drive_c/BlackAndWhite"
 install_dir="${HOME}/wineprefixes/black_and_white/drive_c/Program Files/Lionhead Studios Ltd/Black & White"
 image_dir="${HOME}/games/black_and_white/images/black_and_white/"
+ci_image_dir="${HOME}/games/black_and_white/images/creature_isle/"
 backup_dir="${HOME}/games/black_and_white/backups"
 creature_dir="${HOME}/games/black_and_white/creatures"
 patch_dir="${HOME}/games/black_and_white/patches"
 latest_readme="${install_dir}/readme-patch-v142.txt"
+latest_ci_readme="${install_dir}/CreatureIsle/readme-patch-v124.txt"
 patches=(
   'Black_White_Patch_v1.100'
   'black_white_patch_v1_20'
@@ -40,17 +42,21 @@ patch_urls=(
   ['BW_Football_Addon']='https://forum.bwgame.net/downloads/football-addon.138/download'
   ['BW_Villager_Banter']='https://forum.bwgame.net/downloads/villager-banter.139/download'
 )
+ci_patches=(
+  'BWCIFanPatchInstaller'
+)
+declare -A ci_patch_urls
+ci_patch_urls=(
+  ['BWCIFanPatchInstaller']='https://forum.bwgame.net/downloads/black-white-creature-isle-unofficial-patch-v1-24.1459/download'
+)
 export WINEPREFIX="${HOME}/wineprefixes/black_and_white"
 export WINEARCH=win32
 
 
 function main() {
   case "${1}" in
-    download_patches)
-      download_patches
-      ;;
     install)
-      install
+      install "${2}"
       ;;
     configure)
       install
@@ -72,8 +78,8 @@ function main() {
     '')
       ;&
     play)
-      install
-      play
+      install "${2}"
+      play "${2}"
       ;;
     *)
       usage
@@ -104,23 +110,56 @@ function download_patches() {
 }
 
 
+function download_ci_patches() {
+  cd "${patch_dir}" || fail "Failed to enter patch directory:  '${patch_dir}'" "${?}"
+  for patch in "${!ci_patch_urls[@]}"; do
+    url="${ci_patch_urls[${patch}]}"
+    if ! test -e "${patch}.exe"; then
+      wget --content-disposition --trust-server-names "${url}" || fail "Failed to download patch:  '${patch}'" "${?}"
+    fi
+  done
+  for zip in *.zip; do
+    unzip "${zip}" || fail "Failed to unzip patch:  '${zip}'" "${?}"
+    rm "${zip}" || fail "Failed to clean up zip file:  '${zip}'" "${?}"
+  done
+  for patch in "${!ci_patch_urls[@]}"; do
+    if ! test -e "${patch}.exe"; then
+      fail "Patch missing after download:  '${patch}'"
+    fi
+  done
+  cd "${OLDPWD}"
+}
+
+
 function install() {
-  if check_install; then
-    return 0
+  if ! check_install; then
+    #admonish
+    download_patches
+    configure_wine
+    install_game
+    fix_creature_cave
+    install_patches
   fi
-  #admonish
-  download_patches
-  configure_wine
-  install_game
-  fix_creature_cave
-  install_patches
+  if 
+    test 'ci' = "${1}" \
+    && ! check_ci_install
+  then
+    download_ci_patches
+    install_ci
+    install_ci_patches
+  fi
 }
 
 
 function play() {
   output 'playing the game'
-  cd "${install_dir}" || fail "Failed to enter install path." "${?}"
-  wine runblack.exe  || fail "Failed to start the game." "${?}"
+  if test 'ci' = "${1}"; then
+    cd "${install_dir}/CreatureIsle" || fail "Failed to enter install path." "${?}"
+    wine CreatureIsle.exe || fail "Failed to start Creature Isle." "${?}"
+  else
+    cd "${install_dir}" || fail "Failed to enter install path." "${?}"
+    wine runblack.exe  || fail "Failed to start the game." "${?}"
+  fi
 }
 
 
@@ -279,6 +318,15 @@ function check_install() {
 }
 
 
+function check_ci_install() {
+  if test -e "${latest_ci_readme}"; then
+    return 0
+  fi
+
+  return 1
+}
+
+
 function admonish() {
   warn 'Your active role in the following installation:'
   warn '  * rescue dialog box(es) from behind the backdrop image'
@@ -295,8 +343,9 @@ function configure_wine() {
   wineboot -i || fail "Failed to create wineprefix." "${?}"
 
   cd "${WINEPREFIX}/dosdevices/" || fail "Failed to enter dosdevices directory." "${?}"
-  output 'mapping "optical" drive'
+  output 'mapping "optical" drives'
   ln -s "${image_dir}" d: || fail "Failed to map drive D: to image directory." "${?}"
+  ln -s "${ci_image_dir}" e: || fail "Failed to map drive E: to image directory." "${?}"
   cd "${OLDPWD}"
 
   output 'replacing mono with .NET'
@@ -308,6 +357,12 @@ function configure_wine() {
 function install_game() {
   output 'installing from disc image'
   wine 'D:\Setup.exe' >/dev/null 2>&1 || fail "Installer failed." "${?}"
+}
+
+
+function install_ci() {
+  output 'installing CI from disc image'
+  wine 'E:\Setup.exe' >/dev/null 2>&1 || fail "Installer failed." "${?}"
 }
 
 
@@ -329,6 +384,14 @@ function install_patches() {
 }
 
 
+function install_ci_patches() {
+  for patch in "${ci_patches[@]}"; do
+    output "installing patch:  '${patch}.exe'"
+    wine "${patch_dir}/${patch}.exe" >/dev/null 2>&1 || fail "Patch installer failed:  '${patch}.exe'" "${?}"
+  done
+}
+
+
 function usage() {
 # The name under which the creature was backed up should become the in-game
 # name of the creature when restored.  It doesn't, though.
@@ -339,6 +402,7 @@ function usage() {
   output '  black_and_white'
   output '  black_and_white play'
   output '  black_and_white install'
+  output '  black_and_white install ci'
   output '  black_and_white configure'
   output '  black_and_white backup'
   output '  black_and_white restore'
