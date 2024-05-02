@@ -1,12 +1,4 @@
 #!/bin/bash
-#
-# Requires:
-#   * original game installer disc contents
-#   * wine
-#   * winetricks
-#   * wget
-#   * dos2unix
-
 
 shopt -s nullglob
 

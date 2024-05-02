@@ -28,3 +28,12 @@ no creature name is specified, and only one creature is backed up for this
 profile, that creature will be restored.  If multiple creatures are backed up,
 a creature name must be specified, and the named creature will be restored.  It
 will become the active creature associated with the named profile.
+
+Requirements:
+  * original game installer disc contents
+  * activation code
+  * wine
+  * winetricks
+  * dos2unix
+  * wget
+
