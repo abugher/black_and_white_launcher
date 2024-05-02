@@ -1,4 +1,4 @@
-#Usage:
+# Usage:
 
 ```
 black_and_white [action] [...]
@@ -35,7 +35,7 @@ will become the active creature associated with the named profile.
 Isle.  Backup and restore are not implemented for Creature Isle, yet.
 
 
-#Requirements:
+# Requirements:
 
 * original game installer disc contents
 * activation code
