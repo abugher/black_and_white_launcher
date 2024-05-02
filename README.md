@@ -1,19 +1,21 @@
-Usage:
+#Usage:
 
-  ```
-  black_and_white [action] [...]
+```
+black_and_white [action] [...]
 
-  black_and_white
-  black_and_white play
-  black_and_white install
-  black_and_white configure
-  black_and_white backup
-  black_and_white restore
-  black_and_white backup [name]
-  black_and_white restore [name]
-  black_and_white backup_creature <profile name> [creature name]
-  black_and_white restore_creature <profile name> [creature name]
-  ```
+black_and_white
+black_and_white play
+black_and_white play ci
+black_and_white install
+black_and_white installrci
+black_and_white configure
+black_and_white backup
+black_and_white restore
+black_and_white backup [name]
+black_and_white restore [name]
+black_and_white backup_creature <profile name> [creature name]
+black_and_white restore_creature <profile name> [creature name]
+```
 
 Without arguments, `play` is the implied action.  `play` implies `install` as a
 prior action.  `install` acts only if the game is not yet installed.
@@ -29,11 +31,15 @@ profile, that creature will be restored.  If multiple creatures are backed up,
 a creature name must be specified, and the named creature will be restored.  It
 will become the active creature associated with the named profile.
 
-Requirements:
-  * original game installer disc contents
-  * activation code
-  * wine
-  * winetricks
-  * dos2unix
-  * wget
+`ci` may be specified after `play` or `install` to play or install Creature
+Isle.  Backup and restore are not implemented for Creature Isle, yet.
 
+
+#Requirements:
+
+* original game installer disc contents
+* activation code
+* wine
+* winetricks
+* dos2unix
+* wget
