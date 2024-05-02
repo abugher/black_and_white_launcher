@@ -1,5 +1,7 @@
 *
+!.gitignore
 !bin
 !bin/*
 !README.md
-!.gitignore
+!WTFPL.txt
+!LICENSE
