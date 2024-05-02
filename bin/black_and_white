@@ -393,6 +393,7 @@ function usage() {
   output ''
   output '  black_and_white'
   output '  black_and_white play'
+  output '  black_and_white play ci'
   output '  black_and_white install'
   output '  black_and_white install ci'
   output '  black_and_white configure'
@@ -416,6 +417,9 @@ function usage() {
   output 'profile, that creature will be restored.  If multiple creatures are backed up,'
   output 'a creature name must be specified, and the named creature will be restored.  It'
   output 'will become the active creature associated with the named profile.'
+  output ''
+  output '"ci" may be specified after "play" or "install" to play or install Creature'
+  output 'Isle.  Backup and restore are not implemented for Creature Isle, yet.'
 }
 
 
